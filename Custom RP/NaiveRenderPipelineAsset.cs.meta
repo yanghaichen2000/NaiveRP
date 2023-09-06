@@ -1,0 +1,12 @@
+fileFormatVersion: 2
+guid: 75e08302bdf60e24abb2dddf0be39e1f
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - specularIBL: {fileID: 8900000, guid: 80744c427d5b93a46ac4dcc8d75a3aac, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

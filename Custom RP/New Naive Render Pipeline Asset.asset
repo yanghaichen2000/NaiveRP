@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75e08302bdf60e24abb2dddf0be39e1f, type: 3}
+  m_Name: New Naive Render Pipeline Asset
+  m_EditorClassIdentifier: 
+  specularIBL: {fileID: 8900000, guid: 0c422f185abd23f4ab9063a963d0e7c3, type: 3}
+  diffuseIBL: {fileID: 8900000, guid: 9cd289ba477aef84e86dc052a283bb85, type: 3}
+  brdfLut: {fileID: 2800000, guid: 13b8d1b6633528545a2c97ef9cbce8c7, type: 3}
+  IBLIntensity: 0.5
+  PCSSKernelRadiusCoefficient: 4
+  PCSSLightSize: 2
+  PCFDepthBias: 0.0005
+  enableTAA: 1
+  TAABlendWeight: 0.05
+  SSAOSampleRadius: 1
+  SSAOStrength: 0.8
+  SSAOSampleWeightVariability: 5
+  SSAODeltaDepthFade: 100
+  SSROriginPosDepthBias: 0.0001
+  SSRObjectThickness: 0.003
+  SSRSpacialFilterSize: 0.2
+  SSRColorSpacialFilterVariance: 1
+  SSROccupancySpacialFilterVariance: 10
+  SSRTemporalFilter: 1
+  SSRSampleH: 0
+  GTAODistanceFade: 3
+  GTAOSampleRadius: 1.2
+  GTAOSpacialFilterSize: 2
+  GTAOSpacialFilterVariance: 10
+  GTAOStrength: 0.5
+  enableBloom: 1
+  bloomIntensity: 0.06
+  bloomVariance: 3
+  bloomEnableComputeShader: 1
+  bloomComputeDownSample: {fileID: 7200000, guid: eff1346dd62ee3a47941d00a8e3829e8, type: 3}
+  tmp: 0
+  computeShader1: {fileID: 7200000, guid: 2a7093dfc648f5941b545fcf62623810, type: 3}
+  computeShader2: {fileID: 7200000, guid: 986e4d68b15499b44b4cf8a12e516a8d, type: 3}
+  computeShader3: {fileID: 7200000, guid: 733e53d7044874b43af4cf3af5b91ff3, type: 3}

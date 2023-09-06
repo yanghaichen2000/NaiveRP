@@ -1,0 +1,42 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel HorizontalBlur
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> gInput;
+RWTexture2D<float4> gOutput;
+
+groupshared float4 gCache[266];
+static int N = 256;
+
+[numthreads(N, 1, 1)]
+void HorizontalBlur(int3 groupThreadID : SV_GroupThreadID,
+					int3 dispatchThreadID : SV_DispatchThreadID) {
+
+	float weights[5] = { 0.05399096651323428, 0.24197072451947801, 0.3989422804020545, 0.24197072451947801, 0.05399096651323428 };
+	float weightSumInv = 1.0092185428141434;
+	int gBlurRadius = 2;
+
+	// fill shared memory
+	if (groupThreadID.x < gBlurRadius) {
+		int x = max(dispatchThreadID.x - gBlurRadius, 0);
+		gCache[groupThreadID.x] = gInput[int2(x, dispatchThreadID.y)];
+	}
+	if (groupThreadID.x >= N - gBlurRadius) {
+		int x = min(dispatchThreadID.x + gBlurRadius, gInput.Length.x - 1);
+		gCache[groupThreadID.x + 2 * gBlurRadius] = gInput[int2(x, dispatchThreadID.y)];
+	}
+	gCache[groupThreadID.x + gBlurRadius] = gInput[min(dispatchThreadID.xy, gInput.Length.xy - 1)];
+
+	// sync
+	GroupMemoryBarrierWithGroupSync();
+
+	// conv
+	float4 blurColor = float4(0, 0, 0, 0);
+	for (int i = -gBlurRadius; i <= gBlurRadius; ++i) {
+		int k = groupThreadID.x + gBlurRadius + i;
+		blurColor += weights[i + gBlurRadius] * gCache[k];
+	}
+
+	gOutput[dispatchThreadID.xy] = blurColor * weightSumInv;
+}

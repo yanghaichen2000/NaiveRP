@@ -1,0 +1,99 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel BlurDownSample
+
+
+RWTexture2D<float4> gInput;
+RWTexture2D<float4> gOutput;
+
+// 34 = 1 + 16 * 2 + 1
+groupshared float4 gCache[34][34];
+
+static float gaussianWeights[16] = {
+	0.0167748076, 0.0455986546, 0.0455986546, 0.0167748076,
+	0.0455986546, 0.1239499943, 0.1239499943, 0.0455986546,
+	0.0455986546, 0.1239499943, 0.1239499943, 0.0455986546,
+	0.0167748076, 0.0455986546, 0.0455986546, 0.0167748076
+};
+static float weightSumInv = 1.0779481039181122;
+
+[numthreads(16, 16, 1)]
+void BlurDownSample(int3 groupThreadID : SV_GroupThreadID,
+					int3 dispatchThreadID : SV_DispatchThreadID) {
+
+	/// initialize shared memory
+	
+	// left border
+	if (groupThreadID.x == 0) {
+		int x = max(dispatchThreadID.x * 2 - 1, 0);
+		gCache[0][groupThreadID.y * 2 + 1] = gInput[int2(x, dispatchThreadID.y * 2)];
+		gCache[0][groupThreadID.y * 2 + 2] = gInput[int2(x, dispatchThreadID.y * 2 + 1)];
+
+		// bottom left corner
+		if (groupThreadID.y == 0) {
+			int y = max(dispatchThreadID.y * 2 - 1, 0);
+			gCache[0][0] = gInput[int2(x, y)];
+		}
+
+		// top left corner
+		if (groupThreadID.y == 15) {
+			int y = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+			gCache[0][33] = gInput[int2(x, y)];
+		}
+	}
+
+	// right border
+	if (groupThreadID.x == 15) {
+		int x = min(dispatchThreadID.x * 2 + 2, gInput.Length.x - 1);
+		gCache[33][groupThreadID.y * 2 + 1] = gInput[int2(x, dispatchThreadID.y * 2)];
+		gCache[33][groupThreadID.y * 2 + 2] = gInput[int2(x, dispatchThreadID.y * 2 + 1)];
+
+		// bottom right corner
+		if (groupThreadID.y == 0) {
+			int y = max(dispatchThreadID.y * 2 - 1, 0);
+			gCache[33][0] = gInput[int2(x, y)];
+		}
+
+		// top right corner
+		if (groupThreadID.y == 15) {
+			int y = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+			gCache[33][33] = gInput[int2(x, y)];
+		}
+	}
+
+	// bottom border
+	if (groupThreadID.y == 0) {
+		int y = max(dispatchThreadID.y * 2 - 2, 0);
+		gCache[groupThreadID.x * 2 + 1][0] = gInput[int2(dispatchThreadID.x * 2, y)];
+		gCache[groupThreadID.x * 2 + 2][0] = gInput[int2(dispatchThreadID.x * 2 + 1, y)];
+	}
+
+	// top border
+	if (groupThreadID.y == 15) {
+		int y = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+		gCache[groupThreadID.x * 2 + 1][33] = gInput[int2(dispatchThreadID.x * 2, y)];
+		gCache[groupThreadID.x * 2 + 2][33] = gInput[int2(dispatchThreadID.x * 2 + 1, y)];
+	}
+
+	// common
+	gCache[groupThreadID.x * 2 + 1][groupThreadID.y * 2 + 1] = gInput[min(int2(dispatchThreadID.x * 2, dispatchThreadID.y * 2), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 2][groupThreadID.y * 2 + 1] = gInput[min(int2(dispatchThreadID.x * 2 + 1, dispatchThreadID.y * 2), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 1][groupThreadID.y * 2 + 2] = gInput[min(int2(dispatchThreadID.x * 2, dispatchThreadID.y * 2 + 1), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 2][groupThreadID.y * 2 + 2] = gInput[min(int2(dispatchThreadID.x * 2 + 1, dispatchThreadID.y * 2 + 1), gInput.Length.xy - 1)];
+
+
+	GroupMemoryBarrierWithGroupSync();
+
+
+	/// filter
+	float4 col = float4(0, 0, 0, 1);
+	int baseX = groupThreadID.x * 2;
+	int baseY = groupThreadID.y * 2;
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) {
+			col += gaussianWeights[i * 4 + j] * gCache[baseX + i][baseY + j];
+		}
+	}
+
+	gOutput[dispatchThreadID.xy] = col * weightSumInv;
+	
+}

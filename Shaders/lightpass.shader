@@ -1,0 +1,660 @@
+Shader "NaiveRP/lightpass"
+{
+    Properties
+    {
+        //_MainTex("Texture", 2D) = "white" {}
+    }
+        SubShader
+    {
+        Cull Off 
+        ZWrite On
+        ZTest Always
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+            #include "UnityLightingCommon.cginc"
+
+            static float2 poissonDiskL16D2[16] = {
+                float2(-0.94201624, -0.39906216),
+                float2(0.94558609, -0.76890725),
+                float2(-0.094184101, -0.92938870),
+                float2(0.34495938, 0.29387760),
+                float2(-0.91588581, 0.45771432),
+                float2(-0.81544232, -0.87912464),
+                float2(-0.38277543, 0.27676845),
+                float2(0.97484398, 0.75648379),
+                float2(0.44323325, -0.97511554),
+                float2(0.53742981, -0.47373420),
+                float2(-0.26496911, -0.41893023),
+                float2(0.79197514, 0.19090188),
+                float2(-0.24188840, 0.99706507),
+                float2(-0.81409955, 0.91437590),
+                float2(0.19984126, 0.78641367),
+                float2(0.14383161, -0.14100790)
+            };
+
+            static float2 hammersleySequenceL16D2[16] = {
+                float2(0.0, 0.0),
+                float2(0.0625, 0.5),
+                float2(0.125, 0.25),
+                float2(0.1875, 0.75),
+                float2(0.25, 0.125),
+                float2(0.3125, 0.625),
+                float2(0.375, 0.375),
+                float2(0.4375, 0.875),
+                float2(0.5, 0.0625),
+                float2(0.5625, 0.5625),
+                float2(0.625, 0.3125),
+                float2(0.6875, 0.8125),
+                float2(0.75, 0.1875),
+                float2(0.8125, 0.6875),
+                float2(0.875, 0.4375),
+                float2(0.9375, 0.9375)
+            };
+
+            static float3 hammersleySequenceL16D3[16] = {
+                float3(0.3333333333333333, 0.2, 0.14285714285714285),
+                float3(0.6666666666666666, 0.4, 0.2857142857142857),
+                float3(0.1111111111111111, 0.6, 0.42857142857142855),
+                float3(0.4444444444444444, 0.8, 0.5714285714285714),
+                float3(0.7777777777777778, 0.04, 0.7142857142857143),
+                float3(0.2222222222222222, 0.24, 0.8571428571428571),
+                float3(0.5555555555555556, 0.44, 0.02040816326530612),
+                float3(0.8888888888888888, 0.64, 0.16326530612244897),
+                float3(0.037037037037037035, 0.84, 0.30612244897959184),
+                float3(0.37037037037037035, 0.08, 0.4489795918367347),
+                float3(0.7037037037037037, 0.28, 0.5918367346938775),
+                float3(0.14814814814814814, 0.48, 0.7346938775510204),
+                float3(0.48148148148148145, 0.68, 0.8775510204081632),
+                float3(0.8148148148148148, 0.88, 0.04081632653061224),
+                float3(0.25925925925925924, 0.12, 0.1836734693877551),
+                float3(0.5925925925925926, 0.32, 0.32653061224489793)
+            };
+
+            static float3 hammersleySequenceL32D3[32] = {
+                float3(0.3333333333333333, 0.2, 0.14285714285714285),
+                float3(0.6666666666666666, 0.4, 0.2857142857142857),
+                float3(0.1111111111111111, 0.6, 0.42857142857142855),
+                float3(0.4444444444444444, 0.8, 0.5714285714285714),
+                float3(0.7777777777777778, 0.04, 0.7142857142857143),
+                float3(0.2222222222222222, 0.24, 0.8571428571428571),
+                float3(0.5555555555555556, 0.44, 0.02040816326530612),
+                float3(0.8888888888888888, 0.64, 0.16326530612244897),
+                float3(0.037037037037037035, 0.84, 0.30612244897959184),
+                float3(0.37037037037037035, 0.08, 0.4489795918367347),
+                float3(0.7037037037037037, 0.28, 0.5918367346938775),
+                float3(0.14814814814814814, 0.48, 0.7346938775510204),
+                float3(0.48148148148148145, 0.68, 0.8775510204081632),
+                float3(0.8148148148148148, 0.88, 0.04081632653061224),
+                float3(0.25925925925925924, 0.12, 0.1836734693877551),
+                float3(0.5925925925925926, 0.32, 0.32653061224489793),
+                float3(0.9259259259259259, 0.52, 0.46938775510204084),
+                float3(0.07407407407407407, 0.72, 0.6122448979591837),
+                float3(0.4074074074074074, 0.92, 0.7551020408163265),
+                float3(0.7407407407407407, 0.16, 0.8979591836734694),
+                float3(0.18518518518518517, 0.36, 0.061224489795918366),
+                float3(0.5185185185185185, 0.56, 0.20408163265306123),
+                float3(0.8518518518518519, 0.76, 0.3469387755102041),
+                float3(0.2962962962962963, 0.96, 0.4897959183673469),
+                float3(0.6296296296296297, 0.008, 0.6326530612244898),
+                float3(0.9629629629629629, 0.208, 0.7755102040816326),
+                float3(0.012345679012345678, 0.408, 0.9183673469387755),
+                float3(0.345679012345679, 0.608, 0.08163265306122448),
+                float3(0.6790123456790124, 0.808, 0.22448979591836735),
+                float3(0.12345679012345678, 0.048, 0.3673469387755102),
+                float3(0.4567901234567901, 0.248, 0.5102040816326531),
+                float3(0.7901234567901234, 0.448, 0.6530612244897959)
+            };
+
+
+
+            Texture2D _gdepth;
+            sampler2D _GT0;
+            sampler2D _GT1;
+            sampler2D _GT2;
+            sampler2D _GT3;
+
+            SamplerState _sampler_point_clamp_gdepth;
+            
+            float _screenPixelWidth;
+            float _screenPixelHeight;
+
+            int _TAASampleIndex;
+
+            float3 _cameraUp;
+
+            float4x4 _vpMatrix;
+            float4x4 _vpMatrixInv;
+
+            // sun
+            float3 _LightDirection;
+            float3 _LightColor;
+            float _LightIntensity;
+
+            // IBL
+            samplerCUBE _SpecularIBL;
+            samplerCUBE _DiffuseIBL;
+            sampler2D _BrdfLut;
+            float _IBLIntensity;
+
+            // CSM
+            sampler2D _shadowtex0;
+            sampler2D _shadowtex1;
+            sampler2D _shadowtex2;
+            sampler2D _shadowtex3;
+            float _split0;
+            float _split1;
+            float _split2;
+            float _split3;
+            float4x4 _shadowVpMatrix0;
+            float4x4 _shadowVpMatrix1;
+            float4x4 _shadowVpMatrix2;
+            float4x4 _shadowVpMatrix3;
+            float2 _shadowMapWorldSize0;
+            float2 _shadowMapWorldSize1;
+            float2 _shadowMapWorldSize2;
+            float2 _shadowMapWorldSize3;
+            float _PCSSKernelRadiusCoefficient;
+            float _PCSSLightSize;
+            float _PCFDepthBias;
+
+            // SSAO
+            float _SSAOSampleRadius;
+            float _SSAOStrength;
+            float _SSAOSampleWeightVariability;
+            float _SSAODeltaDepthFade;
+
+            // SSR
+            float _SSROriginPosDepthBias;
+            float _SSRObjectThickness;
+            Texture2D _SSRHalfVector;
+            SamplerState _sampler_point_clamp_SSRHalfVector;
+            Texture2D _SSRRadiance;
+            SamplerState _sampler_point_clamp_SSRRadiance;
+            sampler2D _SSRResolvedRadiance;
+            sampler2D _SSRFilteredRadiance;
+            sampler2D _SSRTemporalFilteredRadiance;
+
+            // GTAO
+            sampler2D _GTAOResolved;
+            sampler2D _GTAOVerticalFiltered;
+            sampler2D _GTAOSpacialFiltered;
+            float _GTAOStrength;
+
+
+            float Rand2to1(float2 uv) {
+                return frac(sin(dot(uv.xy, float2(12.9898, 78.233))) * 43758.5453123);
+            }
+
+            float Rand21to1(float2 uv, float t) {
+                float s = frac(sin(dot(uv.xy, float2(12.9898, 78.233))) * 43758.5453123);
+                return frac(sin(dot(float2(s, t), float2(12.9898, 78.233))) * 43758.5453123);
+            }
+
+            float Rand3to1(float u, float v, float t) {
+                float s = frac(sin(dot(float2(u, v), float2(12.9898, 78.233))) * 43758.5453123);
+                return frac(sin(dot(float2(s, t), float2(12.9898, 78.233))) * 43758.5453123);
+            }
+
+            float ShadowMap01(float4 worldPos, sampler2D _shadowtex, float4x4 _shadowVpMatrix)
+            {
+                float4 shadowNdc = mul(_shadowVpMatrix, worldPos);
+                shadowNdc /= shadowNdc.w;
+                float2 uv = shadowNdc.xy * 0.5 + 0.5;
+
+                if (uv.x < 0 || uv.x>1 || uv.y < 0 || uv.y>1) return 1.0f;
+
+                float d = shadowNdc.z;
+                float d_sample = tex2D(_shadowtex, uv).r;
+
+                #if defined (UNITY_REVERSED_Z)
+                    if (d_sample > d) return 0.0f;
+                #else
+                    if (d_sample < d) return 0.0f;
+                #endif
+
+                return 1.0f;
+            }
+
+            float ShadowMapPCFnxn(float4 worldPos, sampler2D _shadowtex, float4x4 _shadowVpMatrix, 
+                int samples, float kernelRadius, float2 _shadowMapWorldSize)
+            {
+                float4 shadowNdc = mul(_shadowVpMatrix, worldPos);
+                shadowNdc /= shadowNdc.w;
+                float2 uv = shadowNdc.xy * 0.5 + 0.5;
+                float d_shading_point = shadowNdc.z;
+
+                float shadow = 0;     
+
+                int samples_r = (samples - 1) / 2;
+                for (int i = -samples_r; i <= samples_r; i++) {
+                    for (int j = -samples_r; j <= samples_r; j++) {
+                        float2 uv_biased = uv + float2(i, j) * kernelRadius / (samples_r * _shadowMapWorldSize);
+                        if (uv_biased.x < 0 || uv_biased.x > 1 || uv_biased.y < 0 || uv_biased.y > 1) {
+                            shadow += 1.0;
+                        } else {
+                            float d_sample = tex2D(_shadowtex, uv_biased).r;
+                            #if defined (UNITY_REVERSED_Z)
+                                if (d_sample <= d_shading_point) shadow += 1.0;
+                            #else
+                                if (d_sample >= d_shading_point) shadow += 1.0;
+                            #endif
+                        }
+                    }
+                }
+
+                return shadow / (samples * samples);
+            }
+
+            float ShadowMapPCFPoisson16(float4 worldPos, sampler2D _shadowtex, float4x4 _shadowVpMatrix,
+                float kernelRadius, float2 _shadowMapWorldSize)
+            {
+                float4 shadowNdc = mul(_shadowVpMatrix, worldPos);
+                shadowNdc /= shadowNdc.w;
+                float2 uv = shadowNdc.xy * 0.5 + 0.5;
+                float d_shading_point = shadowNdc.z;
+
+                // ���������ת����
+                float random_angle = Rand2to1(uv) * 2 * UNITY_PI;
+                float cosA = cos(random_angle);
+                float sinA = sin(random_angle);
+                float2x2 rotationMatrix = float2x2(cosA, -sinA, sinA, cosA);
+
+                float shadow = 0;
+                
+                for (int i = 0; i < 16; i++) {
+                    float2 uv_bias = mul(rotationMatrix, poissonDiskL16D2[i] * kernelRadius / _shadowMapWorldSize);
+                    float2 uv_biased = uv + uv_bias;
+                    if (uv_biased.x < 0 || uv_biased.x > 1 || uv_biased.y < 0 || uv_biased.y > 1) {
+                        shadow += 1.0;
+                    }
+                    else {
+                        float d_sample = tex2D(_shadowtex, uv_biased).r;
+                        #if defined (UNITY_REVERSED_Z)
+                            if (d_sample <= d_shading_point) shadow += 1.0;
+                        #else
+                            if (d_sample >= d_shading_point) shadow += 1.0;
+                        #endif
+                    }
+                }
+                
+                return shadow / 16;
+            }
+
+            float AverageBlockerDepthPoisson16(float4 worldPos, sampler2D _shadowtex, float4x4 _shadowVpMatrix,
+                float lightSize, float2 _shadowMapWorldSize)
+            {
+                float4 shadowNdc = mul(_shadowVpMatrix, worldPos);
+                shadowNdc /= shadowNdc.w;
+                float2 uv = shadowNdc.xy * 0.5 + 0.5;
+                float d_shading_point = shadowNdc.z;
+
+                // ���������ת����
+                float random_angle = Rand21to1(uv, _Time.w) * 2 * UNITY_PI;
+                float cosA = cos(random_angle);
+                float sinA = sin(random_angle);
+                float2x2 rotationMatrix = float2x2(cosA, -sinA, sinA, cosA);
+
+                float d_blocker_sum = 0;
+                float count = 0.0005;
+
+                for (int i = 0; i < 16; i++) {
+                    float2 uv_bias = mul(rotationMatrix, poissonDiskL16D2[i] * lightSize / _shadowMapWorldSize);
+                    float2 uv_biased = uv + uv_bias;
+                    float d_sample = tex2D(_shadowtex, uv_biased).r;
+                    #if defined (UNITY_REVERSED_Z)
+                    if (d_sample > d_shading_point) {
+                        d_blocker_sum += d_sample;
+                        count += 1;
+                    }
+                    #else
+                    if (d_sample < d_shading_point) {
+                        d_blocker_sum += d_sample;
+                        count += 1;
+                    }
+                    #endif
+                }
+
+                return d_blocker_sum / count;
+            }
+
+            float ShadowMapPCSSPoisson16(float4 worldPos, sampler2D _shadowtex, float4x4 _shadowVpMatrix,
+                float lightSize, float2 _shadowMapWorldSize)
+            {
+
+                float d_blocker = AverageBlockerDepthPoisson16(worldPos, _shadowtex, _shadowVpMatrix, lightSize, _shadowMapWorldSize);
+
+                float4 shadowNdc = mul(_shadowVpMatrix, worldPos);
+                shadowNdc /= shadowNdc.w;
+                float2 uv = shadowNdc.xy * 0.5 + 0.5;
+                float d_shading_point = shadowNdc.z;
+
+                #if defined (UNITY_REVERSED_Z)
+                    float kernelRadius = lightSize / (1.0 - d_blocker) * (d_blocker - d_shading_point);
+                #else
+                    float kernelRadius = lightSize / d_blocker * (d_shading_point - d_blocker);
+                #endif
+
+                // ���������ת����
+                float random_angle = Rand21to1(uv, _Time.z) * 2 * UNITY_PI;
+                float cosA = cos(random_angle);
+                float sinA = sin(random_angle);
+                float2x2 rotationMatrix = float2x2(cosA, -sinA, sinA, cosA);
+
+                float shadow = 0;
+
+                for (int i = 0; i < 16; i++) {
+                    float2 uv_bias = mul(rotationMatrix, poissonDiskL16D2[i] * kernelRadius * _PCSSKernelRadiusCoefficient / _shadowMapWorldSize);
+                    float2 uv_biased = uv + uv_bias;
+                    if (uv_biased.x < 0 || uv_biased.x > 1 || uv_biased.y < 0 || uv_biased.y > 1) {
+                        shadow += 1.0;
+                    }
+                    else {
+                        float d_sample = tex2D(_shadowtex, uv_biased).r;
+                        #if defined (UNITY_REVERSED_Z)
+                            if (d_sample <= d_shading_point + _PCFDepthBias) shadow += 1.0;
+                        #else
+                            if (d_sample >= d_shading_point - _PCFDepthBias) shadow += 1.0;
+                        #endif
+                    }
+                }
+
+                return shadow / 16;
+            }
+
+            float SSAO(float3 worldPos, float3 worldNormal, float2 uv) {
+
+                // �����ֲ�����ϵ
+                float3 randomVector = hammersleySequenceL16D3[_TAASampleIndex % 16];
+                float3 worldTangent = cross(worldNormal, normalize(randomVector));
+                float3 worldBinormal = cross(worldNormal, worldTangent);
+
+                // �����ھ��Ȳ���
+                float visibilitySum = 0;
+                float weightSum = 0.0001;
+                for (float count = 0; count < 32; count++) {
+                    float r = _SSAOSampleRadius * pow(Rand3to1(uv.x, count / 32.0f, saturate(_Time.x)), 0.3333333333);
+                    float localNormal = Rand3to1(uv.y, count / 32.0f, saturate(_Time.x));
+                    float tmp_func_z = sqrt(1 - localNormal * localNormal);
+                    float theta = 6.2831853072 * Rand2to1(float2(count / 32.0f, saturate(_Time.x)));
+                    float localTangent = r * tmp_func_z * cos(theta);
+                    float localBinormal = r * tmp_func_z * sin(theta);
+                    localNormal = r * localNormal;
+                    float3 sampleLocalDisplacement = localNormal * worldNormal + localTangent * worldTangent + localBinormal * worldBinormal;
+                    float3 sampleWorldPos = worldPos + sampleLocalDisplacement;
+                    float4 sampleNDCPos = mul(_vpMatrix, float4(sampleWorldPos, 1));
+                    sampleNDCPos /= sampleNDCPos.w;
+                    sampleNDCPos.y = -sampleNDCPos.y;
+                    float2 sampleNDCUV = (sampleNDCPos.xy + 1) * 0.5;
+                    float sampleNDCDepth = sampleNDCPos.z;
+                    float sampleNDCLinearDepth = Linear01Depth(sampleNDCDepth);
+                    float sampleGbufferLinearDepth = Linear01Depth(UNITY_SAMPLE_DEPTH(_gdepth.Sample(_sampler_point_clamp_gdepth, sampleNDCUV)));
+                    float cosTheta = dot(sampleLocalDisplacement, worldNormal);
+                    float sampleWeight = cosTheta * exp(-_SSAOSampleWeightVariability * r);
+                    if (sampleNDCLinearDepth <= sampleGbufferLinearDepth) {
+                        visibilitySum += sampleWeight;
+                    }
+                    else {
+                        visibilitySum += sampleWeight * (1 - exp(_SSAODeltaDepthFade * (sampleGbufferLinearDepth - sampleNDCLinearDepth)));
+                    }
+                    weightSum += sampleWeight;
+                }
+
+                float visibility = visibilitySum / weightSum;
+                return visibility;
+
+            }
+
+            float3 PBRShading(float3 normal, float3 view_dir, float3 light_dir, float3 light_color, float roughness, float3 albedo, float metallic) {
+
+                roughness = max(roughness, 0.05);
+
+                float3 n = normal;
+                float3 v = view_dir;
+                float3 l = light_dir;
+                float3 h = normalize(v + l);
+                float3 r = normalize(reflect(-v, n));
+
+                float v_dot_h = max(dot(v, h), 0);
+                float n_dot_v = max(dot(n, v), 0);
+                float n_dot_h = max(dot(n, h), 0);
+                float n_dot_l = max(dot(n, l), 0);
+
+                float3 F0_diffuse = float3(0.04, 0.04, 0.04);
+
+                // F
+                float3 F0 = lerp(F0_diffuse, albedo, float3(metallic, metallic, metallic));
+                float power = (-5.55473 * v_dot_h - 6.98316) * v_dot_h;
+                float3 F = F0 + (1 - F0) * pow(2, power);
+
+                // D
+                float a = roughness * roughness;
+                float a_2 = a * a;
+                float tmp = n_dot_h * n_dot_h * (a_2 - 1) + 1;
+                float D = a_2 / (UNITY_PI * tmp * tmp);
+
+                // G
+                float k = (roughness + 1) * (roughness + 1) * 0.125;
+                float G1 = n_dot_v / (n_dot_v * (1 - k) + k);
+                float G2 = n_dot_l / (n_dot_l * (1 - k) + k);
+                float G = G1 * G2;
+
+                // specular
+                float3 specular_brdf = D * F * G / (4 * n_dot_l * n_dot_v + 0.001);
+                float3 specular_color = specular_brdf * light_color * n_dot_l;
+
+                // diffuse
+                float3 weight_diffuse = lerp(float3(1, 1, 1) - F, float3(0, 0, 0), float3(metallic, metallic, metallic));
+                float3 diffuse_brdf = albedo / UNITY_PI * weight_diffuse;
+                float3 diffuse_color = diffuse_brdf * light_color * n_dot_l;
+
+                return (specular_color + diffuse_color) * UNITY_PI;
+            }
+
+            float3 IBL(float3 normal, float3 view_dir, float roughness, float3 albedo, float metallic) {
+                
+                float3 n = normal;
+                float3 v = view_dir;
+                float3 r = normalize(reflect(-v, n));
+
+                float n_dot_v = max(dot(n, v), 0);
+
+                float3 F0_diffuse = float3(0.04, 0.04, 0.04);
+                float3 F0 = lerp(F0_diffuse, albedo, float3(metallic, metallic, metallic));
+                //float power = (-5.55473 * n_dot_v - 6.98316) * n_dot_v;
+                //float3 F = F0 + (1 - F0) * pow(2, power);
+                float3 F = F0;
+                float3 weight_diffuse = lerp(float3(1, 1, 1) - F, float3(0, 0, 0), float3(metallic, metallic, metallic));
+
+                // specular IBL
+                float roughness_clamp = min(roughness, 0.97);
+                float roughness_lod = roughness_clamp * (1.7 - 0.7 * roughness_clamp);
+                float lod = 6.0 * roughness_lod;  // Unity mipmap: [0, 1, 2, 3, 4, 5, 6]
+                float3 specular_light_IBL = texCUBElod(_SpecularIBL, float4(r, lod)).rgb;
+                float2 specular_brdf_IBL = tex2D(_BrdfLut, float2(n_dot_v, roughness_clamp)).rg;
+                float3 specular_color_IBL = specular_light_IBL * (F0 * specular_brdf_IBL.x + specular_brdf_IBL.y);
+
+                // diffuse IBL
+                float3 diffuse_light_IBL = texCUBE(_DiffuseIBL, n).rgb;
+                float3 diffuse_color_IBL = weight_diffuse * albedo * diffuse_light_IBL;
+
+                // sum
+                float3 color_IBL = specular_color_IBL + diffuse_color_IBL;
+
+                return color_IBL * _IBLIntensity;
+            }
+
+            float3 compute_frag_color(float3 normal, float3 view_dir, float3 light_dir, float3 light_color, float roughness, float3 albedo, float metallic, float shadow, float SSAOWeight)
+            {
+                float3 color_direct = PBRShading(normal, view_dir, light_dir, light_color, roughness, albedo, metallic);
+                float3 color_IBL = IBL(normal, view_dir, roughness, albedo, metallic);
+
+                return color_direct * shadow + color_IBL * SSAOWeight;
+            }
+
+            float3 SSR(float3 worldPos, float3 normal, float3 reflectionDir) {
+                
+                float stepLength = 0.5;
+                uint hit = 0;
+                float3 currentWorldPos = worldPos;
+                float4 currentNDCPos = mul(_vpMatrix, float4(currentWorldPos, 1));
+                currentNDCPos /= currentNDCPos.w;
+                currentNDCPos.z += _SSROriginPosDepthBias;
+                float4 currentWorldPos4 = mul(_vpMatrixInv, currentNDCPos);
+                currentWorldPos = currentWorldPos4.xyz / currentWorldPos4.w;
+                currentNDCPos.y = -currentNDCPos.y;
+                float2 currentUV = (currentNDCPos.xy + 1) * 0.5;
+                float2 nextUV;
+                for (int step = 0; step < 100; step++) {
+                    float4 currentNDCPos = mul(_vpMatrix, float4(currentWorldPos, 1));
+                    currentNDCPos /= currentNDCPos.w;
+                    currentNDCPos.y = -currentNDCPos.y;
+                    currentUV = (currentNDCPos.xy + 1) * 0.5;
+                    float3 nextWorldPos = currentWorldPos + reflectionDir * stepLength;
+                    float4 nextNDCPos = mul(_vpMatrix, float4(nextWorldPos, 1));
+                    nextNDCPos /= nextNDCPos.w;
+                    nextNDCPos.y = -nextNDCPos.y;
+                    nextUV = (nextNDCPos.xy + 1) * 0.5;
+                    float nextNDCDepth = nextNDCPos.z;
+                    float NextGbuffeDepth = UNITY_SAMPLE_DEPTH(_gdepth.Sample(_sampler_point_clamp_gdepth, nextUV));
+                    if (nextUV.x < 0 || nextUV.x > 1 || nextUV.y < 0 || nextUV.y > 1) {
+                        break;
+                    }
+                    else if (nextNDCDepth <= NextGbuffeDepth) {
+                        if (length((nextUV - currentUV) * float2(_screenPixelWidth, _screenPixelHeight)) > 1.0f) {
+                            stepLength *= 0.5;
+                        }
+                        else {
+                            currentWorldPos = nextWorldPos;
+                            if (Linear01Depth(nextNDCDepth) < Linear01Depth(NextGbuffeDepth) + _SSRObjectThickness) { hit = 1; }
+                            break;
+                        }
+                    }
+                    else {
+                        currentWorldPos = nextWorldPos;
+                    }
+                }
+
+                float3 screenSpaceRadiance = float3(0, 0, 0);
+                if (hit == 1) {
+                    float3 V = -reflectionDir;
+                    float3 N = normalize(tex2D(_GT1, nextUV).rgb * 2 - 1);
+                    float3 L = normalize(_LightDirection.xyz);
+                    float3 lightRadiance = _LightColor * _LightIntensity;
+                    float4 GT2 = tex2D(_GT2, nextUV);
+                    float roughness = GT2.b;
+                    float metallic = GT2.a;
+                    float3 albedo = tex2D(_GT0, nextUV).rgb;
+                    float shadow = 1;
+                    float SSAOWeight = 1;
+                    float3 directLightReflectionRadiance = PBRShading(N, V, L, lightRadiance, roughness, albedo, metallic);
+                    float3 indirectLightReflectionRadiance = IBL(N, V, roughness, albedo, metallic);
+                    screenSpaceRadiance = directLightReflectionRadiance * shadow + indirectLightReflectionRadiance * SSAOWeight;
+                }
+                
+                return screenSpaceRadiance;
+            }
+
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float4 vertex : SV_POSITION;
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+                return o;
+            }
+
+            float4 frag(v2f i, out float depthOut : SV_Depth) : SV_Target
+            {
+                // ����gbuffer
+                float3 albedo = tex2D(_GT0, i.uv).rgb;
+                float3 normal = normalize(tex2D(_GT1, i.uv).rgb * 2 - 1);
+                float4 GT2 = tex2D(_GT2, i.uv);
+                float4 GT3 = tex2D(_GT3, i.uv);
+                float2 motionVec = GT2.rg;
+                float roughness = GT2.b;
+                float metallic = GT2.a;
+                float3 emission = GT3.rgb;
+                float occlusion = GT3.a;
+                float d = _gdepth.Sample(_sampler_point_clamp_gdepth, i.uv);
+                float d_linear = Linear01Depth(d);
+                float4 ndcPos = float4(i.uv * 2 - 1, d, 1);
+                ndcPos.y = -ndcPos.y;
+                float4 worldPos = mul(_vpMatrixInv, ndcPos);
+                worldPos /= worldPos.w;
+
+                // shadow
+                float4 worldPosOffset = worldPos;
+                worldPosOffset.xyz += normal * 0.01;
+
+                float shadow = 1.0;
+                float3 shadow_type_color = float3(1, 1, 1);
+                float shadow0 = ShadowMapPCSSPoisson16(worldPosOffset, _shadowtex0, _shadowVpMatrix0, _PCSSLightSize, _shadowMapWorldSize0);
+                float shadow1 = ShadowMapPCSSPoisson16(worldPosOffset, _shadowtex1, _shadowVpMatrix1, _PCSSLightSize, _shadowMapWorldSize1);
+                float shadow2 = ShadowMapPCSSPoisson16(worldPosOffset, _shadowtex2, _shadowVpMatrix2, _PCSSLightSize, _shadowMapWorldSize2);
+                float shadow3 = ShadowMapPCSSPoisson16(worldPosOffset, _shadowtex3, _shadowVpMatrix3, _PCSSLightSize, _shadowMapWorldSize3);
+
+                if (d_linear < _split0) {
+                    shadow *= shadow0;
+                    shadow_type_color = float3(1, 0.5, 0.5);
+                }
+                else if (d_linear < _split0 + _split1) {
+                    shadow *= shadow1;
+                    shadow_type_color = float3(0.5, 1, 0.5);
+                }
+                else if (d_linear < _split0 + _split1 + _split2) {
+                    shadow *= shadow2;
+                    shadow_type_color = float3(0.5, 0.5, 1);
+                }
+                else if (d_linear < _split0 + _split1 + _split2 + _split3) {
+                    shadow *= shadow3;
+                    shadow_type_color = float3(1, 1, 0.5);
+                }
+                else {
+                    shadow_type_color = float3(1, 0.5, 1);
+                }
+
+                // SSAO
+                //float visibility = SSAO(worldPos, normal, i.uv);
+                //float visibilityLowerBound = saturate(1 - _SSAOStrength);
+                //float SSAOWeight = lerp(visibilityLowerBound, 1, visibility);
+
+                // directional lighting
+                float3 N = normal;
+                float3 L = normalize(_LightDirection.xyz);
+                float3 V = normalize(_WorldSpaceCameraPos.xyz - worldPos.xyz);
+                float3 lightRadiance = _LightColor * _LightIntensity;
+
+                // write depth
+                depthOut = d;
+                
+                float3 R = normalize(reflect(-V, N));
+                float3 directColor = PBRShading(N, V, L, lightRadiance, roughness, albedo, metallic);
+                
+                float3 IBLColor = IBL(N, V, roughness, albedo, metallic);
+
+                float3 col = (directColor * shadow + IBLColor);
+                return float4(col, 1);
+
+            }
+            ENDCG
+        }
+    }
+}

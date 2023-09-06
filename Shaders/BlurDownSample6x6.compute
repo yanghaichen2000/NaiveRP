@@ -1,0 +1,124 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel BlurDownSample
+
+
+RWTexture2D<float4> gInput;
+RWTexture2D<float4> gOutput;
+
+// 36 = 2 + 16 * 2 + 2
+groupshared float4 gCache[36][36];
+
+static float gaussianWeights[36] = {
+	0.0003072413, 0.0022702233, 0.0061711068, 0.0061711068, 0.0022702233, 0.0003072413,
+	0.0022702233, 0.0167748076, 0.0455986546, 0.0455986546, 0.0167748076, 0.0022702233,
+	0.0061711068, 0.0455986546, 0.1239499943, 0.1239499943, 0.0455986546, 0.0061711068,
+	0.0061711068, 0.0455986546, 0.1239499943, 0.1239499943, 0.0455986546, 0.0061711068,
+	0.0022702233, 0.0167748076, 0.0455986546, 0.0455986546, 0.0167748076, 0.0022702233,
+	0.0003072413, 0.0022702233, 0.0061711068, 0.0061711068, 0.0022702233, 0.0003072413 };
+static float weightSumInv = 1.0035646099146402;
+
+[numthreads(16, 16, 1)]
+void BlurDownSample(int3 groupThreadID : SV_GroupThreadID,
+					int3 dispatchThreadID : SV_DispatchThreadID) {
+
+	/// initialize shared memory
+	
+	// left border
+	if (groupThreadID.x == 0) {
+		int xLeft = max(dispatchThreadID.x * 2 - 2, 0);
+		gCache[0][groupThreadID.y * 2 + 2] = gInput[int2(xLeft, dispatchThreadID.y * 2)];
+		gCache[1][groupThreadID.y * 2 + 2] = gInput[int2(xLeft + 1, dispatchThreadID.y * 2)];
+		gCache[0][groupThreadID.y * 2 + 3] = gInput[int2(xLeft, dispatchThreadID.y * 2 + 1)];
+		gCache[1][groupThreadID.y * 2 + 3] = gInput[int2(xLeft + 1, dispatchThreadID.y * 2 + 1)];
+
+		// bottom left corner
+		if (groupThreadID.y == 0) {
+			int yBottom = max(dispatchThreadID.y * 2 - 2, 0);
+			gCache[0][0] = gInput[int2(xLeft, yBottom)];
+			gCache[1][0] = gInput[int2(xLeft + 1, yBottom)];
+			gCache[0][1] = gInput[int2(xLeft, yBottom + 1)];
+			gCache[1][1] = gInput[int2(xLeft + 1, yBottom + 1)];
+		}
+
+		// top left corner
+		if (groupThreadID.y == 15) {
+			int yTop = min(dispatchThreadID.y * 2 + 3, gInput.Length.y - 1);
+			int yBottom = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+			gCache[0][34] = gInput[int2(xLeft, yBottom)];
+			gCache[1][34] = gInput[int2(xLeft + 1, yBottom)];
+			gCache[0][35] = gInput[int2(xLeft, yTop)];
+			gCache[1][35] = gInput[int2(xLeft + 1, yTop)];
+		}
+	}
+
+	// right border
+	if (groupThreadID.x == 15) {
+		int xRight = min(dispatchThreadID.x * 2 + 3, gInput.Length.x - 1);
+		int xLeft = min(dispatchThreadID.x * 2 + 2, gInput.Length.x - 1);
+		gCache[34][groupThreadID.y * 2 + 2] = gInput[int2(xLeft, dispatchThreadID.y * 2)];
+		gCache[35][groupThreadID.y * 2 + 2] = gInput[int2(xRight, dispatchThreadID.y * 2)];
+		gCache[34][groupThreadID.y * 2 + 3] = gInput[int2(xLeft, dispatchThreadID.y * 2 + 1)];
+		gCache[35][groupThreadID.y * 2 + 3] = gInput[int2(xRight, dispatchThreadID.y * 2 + 1)];
+
+		// bottom right corner
+		if (groupThreadID.y == 0) {
+			int yBottom = max(dispatchThreadID.y * 2 - 2, 0);
+			gCache[34][0] = gInput[int2(xLeft, yBottom)];
+			gCache[35][0] = gInput[int2(xRight, yBottom)];
+			gCache[34][1] = gInput[int2(xLeft, yBottom + 1)];
+			gCache[35][1] = gInput[int2(xRight, yBottom + 1)];
+		}
+
+		// top right corner
+		if (groupThreadID.y == 15) {
+			int yTop = min(dispatchThreadID.y * 2 + 3, gInput.Length.y - 1);
+			int yBottom = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+			gCache[34][34] = gInput[int2(xLeft, yBottom)];
+			gCache[35][34] = gInput[int2(xRight, yBottom)];
+			gCache[34][35] = gInput[int2(xLeft, yTop)];
+			gCache[35][35] = gInput[int2(xRight, yTop)];
+		}
+	}
+
+	// bottom border
+	if (groupThreadID.y == 0) {
+		int yBottom = max(dispatchThreadID.y * 2 - 2, 0);
+		gCache[groupThreadID.x * 2 + 2][0] = gInput[int2(dispatchThreadID.x * 2, yBottom)];
+		gCache[groupThreadID.x * 2 + 3][0] = gInput[int2(dispatchThreadID.x * 2 + 1, yBottom)];
+		gCache[groupThreadID.x * 2 + 2][1] = gInput[int2(dispatchThreadID.x * 2, yBottom + 1)];
+		gCache[groupThreadID.x * 2 + 3][1] = gInput[int2(dispatchThreadID.x * 2 + 1, yBottom + 1)];
+	}
+
+	// top border
+	if (groupThreadID.y == 15) {
+		int yTop = min(dispatchThreadID.y * 2 + 3, gInput.Length.y - 1);
+		int yBottom = min(dispatchThreadID.y * 2 + 2, gInput.Length.y - 1);
+		gCache[groupThreadID.x * 2 + 2][34] = gInput[int2(dispatchThreadID.x * 2, yBottom)];
+		gCache[groupThreadID.x * 2 + 3][34] = gInput[int2(dispatchThreadID.x * 2 + 1, yBottom)];
+		gCache[groupThreadID.x * 2 + 2][35] = gInput[int2(dispatchThreadID.x * 2, yTop)];
+		gCache[groupThreadID.x * 2 + 3][35] = gInput[int2(dispatchThreadID.x * 2 + 1, yTop)];
+	}
+
+	// common
+	gCache[groupThreadID.x * 2 + 2][groupThreadID.y * 2 + 2] = gInput[min(int2(dispatchThreadID.x * 2, dispatchThreadID.y * 2), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 3][groupThreadID.y * 2 + 2] = gInput[min(int2(dispatchThreadID.x * 2 + 1, dispatchThreadID.y * 2), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 2][groupThreadID.y * 2 + 3] = gInput[min(int2(dispatchThreadID.x * 2, dispatchThreadID.y * 2 + 1), gInput.Length.xy - 1)];
+	gCache[groupThreadID.x * 2 + 3][groupThreadID.y * 2 + 3] = gInput[min(int2(dispatchThreadID.x * 2 + 1, dispatchThreadID.y * 2 + 1), gInput.Length.xy - 1)];
+
+
+	GroupMemoryBarrierWithGroupSync();
+
+
+	/// filter
+	float4 col = float4(0, 0, 0, 1);
+	int baseX = groupThreadID.x * 2;
+	int baseY = groupThreadID.y * 2;
+	for (int i = 0; i < 6; i++) {
+		for (int j = 0; j < 6; j++) {
+			col += gaussianWeights[i * 6 + j] * gCache[baseX + i][baseY + j];
+		}
+	}
+
+	gOutput[dispatchThreadID.xy] = col * weightSumInv;
+	
+}
